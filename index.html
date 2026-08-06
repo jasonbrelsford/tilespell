@@ -59,6 +59,10 @@ header{display:flex;align-items:center;justify-content:space-between;gap:8px;pad
   border:2px solid #FFC63F;border-radius:999px;padding:5px 15px;margin:0 auto;
   box-shadow:0 3px 0 #D89A22,0 0 12px rgba(255,198,63,.4);}
 #starbar.on{display:flex;}
+/* Transient bars float over the felt instead of reflowing the layout (the mat used
+   to get shoved down every time one popped in) and fade out after a few seconds */
+#starbar,#ravenbar,#stormbar{position:absolute;top:12px;left:50%;transform:translateX(-50%);
+  z-index:60;width:max-content;max-width:92%;}
 #ravenbar{display:none;justify-content:center;align-items:center;font-size:12.5px;font-weight:800;
   color:#EFE6FF;background:linear-gradient(180deg,#6A4A9E,#4A2A6A);
   border:2px solid #B39BE0;border-radius:999px;padding:4px 14px;margin:0 auto;
@@ -88,7 +92,7 @@ header{display:flex;align-items:center;justify-content:space-between;gap:8px;pad
 @keyframes breathe{0%,100%{transform:scale(1)}50%{transform:scale(1.05)}}
 #clearbtn{background:linear-gradient(180deg,#FFFFFF,#F1E9DA);color:var(--ink);border:2px solid #fff;
   box-shadow:0 4px 0 rgba(110,80,50,.28);}
-#boardwrap{border-radius:26px;padding:16px 12px;display:flex;justify-content:center;align-items:center;min-height:200px;flex:1;
+#boardwrap{position:relative;border-radius:26px;padding:16px 12px;display:flex;justify-content:center;align-items:center;min-height:200px;flex:1;
   background:radial-gradient(120% 100% at 50% 0%,var(--felt) 0%,var(--felt-dark) 100%);
   box-shadow:inset 0 6px 18px rgba(0,0,0,.35),inset 0 -3px 8px rgba(255,255,255,.08),
     0 6px 14px rgba(0,0,0,.25),0 0 0 5px #FFF3D0,0 0 0 7px #D9B36A;
@@ -308,10 +312,12 @@ textarea.mkin{min-height:58px;resize:vertical;}
     </span>
   </header>
   <div id="themebar"><span id="themelabel"></span><span id="themeprog"></span></div>
-  <div id="starbar">⭐ Challenge letters — spell them for +100 each!</div>
-  <div id="ravenbar">🪶 Feather held — the raven thief can't touch you</div>
-  <div id="stormbar">⚡ dead tiles — ✂️ Remove clears them · 🧟 zombies pay +25</div>
-  <div id="boardwrap"><div id="board"></div></div>
+  <div id="boardwrap">
+    <div id="starbar">⭐ Challenge letters — spell them for +100 each!</div>
+    <div id="ravenbar">🪶 Feather held — the raven thief can't touch you</div>
+    <div id="stormbar">⚡ dead tiles — ✂️ Remove clears them · 🧟 zombies pay +25</div>
+    <div id="board"></div>
+  </div>
   <span id="traymsg">Tap open tiles to spell a word (3–7 letters)</span>
   <div id="traywrap"><div id="tray"></div></div>
   <div id="actionrow">
@@ -719,7 +725,7 @@ function track(ev,params){
 }
 function levelId(){
   if(endlessMode)return "end_l"+(lvl+1);
-  if(sponsorMode)return "spon_l1";
+  if(sponsorMode)return "spon_l"+(lvl+1);
   if(friendMode)return "frnd_l1";
   return "a"+(area+1<10?"0":"")+(area+1)+"_l"+(lvl+1<10?"0":"")+(lvl+1);
 }
@@ -754,39 +760,37 @@ function beep(f,d,type,g){if(muted)return;try{AC=AC||new (window.AudioContext||w
  var o=AC.createOscillator(),v=AC.createGain();o.type=type||"sine";o.frequency.value=f;
  v.gain.setValueAtTime(g||.12,AC.currentTime);v.gain.exponentialRampToValueAtTime(.0001,AC.currentTime+(d||.15));
  o.connect(v);v.connect(AC.destination);o.start();o.stop(AC.currentTime+(d||.15));}catch(e){}}
-/* Generative garden music — no audio asset (file stays light). A soft pentatonic
-   music-box melody wanders over a low two-note pad; obeys the mute button and goes
-   silent when the app is backgrounded. Starts on the first touch (iOS gesture rule). */
-var musicStarted=false,musicTimer=null,musicNext=0,musPrev=3,padNodes=null;
+/* Generative garden music — no audio asset (file stays light). Melody only (no drone,
+   per Jason): a soft pentatonic music-box line that breathes in waves — ~28s of melody
+   fading in and out, then ~20s of quiet — so it never wears on you. Obeys the mute
+   button, silent when backgrounded, starts on the first touch (iOS gesture rule). */
+var musicStarted=false,musicTimer=null,musicNext=0,musPrev=3,musicEpoch=0;
 var PENT=[261.63,293.66,329.63,392.00,440.00,523.25,587.33,659.25];
-function musicNote(t){
+function melodyLevel(t){
+  var CYC=48,ON=28,EDGE=5;
+  var p=(t-musicEpoch)%CYC;
+  if(p>=ON)return 0;
+  if(p<EDGE)return p/EDGE;
+  if(p>ON-EDGE)return (ON-p)/EDGE;
+  return 1;
+}
+function musicNote(t,lv){
   var o=AC.createOscillator(),v=AC.createGain();
   var move=[-2,-1,-1,0,1,1,2][Math.floor(Math.random()*7)];
   musPrev=Math.max(0,Math.min(PENT.length-1,musPrev+move));
   o.type="triangle";o.frequency.value=PENT[musPrev];
   v.gain.setValueAtTime(0,t);
-  v.gain.linearRampToValueAtTime(0.05,t+0.02);
+  v.gain.linearRampToValueAtTime(0.05*lv,t+0.02);
   v.gain.exponentialRampToValueAtTime(0.0001,t+0.95);
   o.connect(v);v.connect(AC.destination);o.start(t);o.stop(t+1);
 }
-function stopPad(){
-  if(!padNodes)return;
-  try{padNodes.o1.stop();padNodes.o2.stop();padNodes.g.disconnect();}catch(e){}
-  padNodes=null;
-}
 function musicTick(){
-  if(!AC||muted||document.hidden||AC.state==="suspended"){stopPad();return;}
-  if(!padNodes){
-    var g=AC.createGain();g.gain.value=0.016;
-    var o1=AC.createOscillator(),o2=AC.createOscillator();
-    o1.type="sine";o2.type="sine";o1.frequency.value=130.81;o2.frequency.value=196.00;
-    o1.connect(g);o2.connect(g);g.connect(AC.destination);o1.start();o2.start();
-    padNodes={g:g,o1:o1,o2:o2};
-  }
+  if(!AC||muted||document.hidden||AC.state==="suspended")return;
   var now=AC.currentTime;
   if(musicNext<now)musicNext=now+0.1;
   while(musicNext<now+0.7){
-    if(Math.random()<0.5)musicNote(musicNext);
+    var lv=melodyLevel(musicNext);
+    if(lv>0&&Math.random()<0.5)musicNote(musicNext,lv);
     musicNext+=0.416;
   }
 }
@@ -796,6 +800,7 @@ function startMusic(){
   try{
     AC=AC||new (window.AudioContext||window.webkitAudioContext)();
     if(AC.state==="suspended")AC.resume();
+    musicEpoch=AC.currentTime;
     musicTimer=setInterval(musicTick,300);
   }catch(e){}
 }
@@ -943,9 +948,12 @@ function genAreaLevel(a,i){
   if(A.summit&&i===9)cfg.toast="🏔️ The last level of the Trail — the very top!";
   return cfg;
 }
-function genSponsor(){
-  return {target:250,pos:LEVELS[4].pos,theme:"moomunch",goal:2,places:2,
-    toast:"📺 Sponsored board — Moo Munch words pay ×2! (fictional demo brand)"};
+function genSponsor(i){
+  /* 10-level sponsor run (Jason 2026-08-06) — gentler curve than the trail so it
+     stays a light snackable session; one ad break at the end of the run */
+  var cfg={target:Math.round(250*Math.pow(1.13,i)/10)*10,pos:LEVELS[i].pos,theme:"moomunch",goal:2,places:2};
+  if(i===0)cfg.toast="📺 Sponsored boards — Moo Munch words pay ×2! (fictional demo brand)";
+  return cfg;
 }
 function genFriend(){
   return {target:250,pos:LEVELS[2].pos,theme:"friend",goal:Math.min(3,FRIEND.words.length),places:3,
@@ -1063,6 +1071,21 @@ function ensurePlayable(){
   dealLetters();render();
 }
 function notCovered(t){return t.alive&&!covered(t);}
+/* Banner shows when its condition turns on, fades after 5s, re-shows on re-trigger */
+function flashBar(id,on){
+  var el=$(id);
+  if(on&&!el._on){
+    el._on=true;el.classList.add("on");
+    clearTimeout(el._h);el._h=setTimeout(function(){el.classList.remove("on");},5000);
+  }else if(!on&&el._on){
+    el._on=false;clearTimeout(el._h);el.classList.remove("on");
+  }
+}
+function resetBars(){
+  ["starbar","ravenbar","stormbar"].forEach(function(id){
+    var el=$(id);el._on=false;clearTimeout(el._h);el.classList.remove("on");
+  });
+}
 
 var frozenScale=0;
 function fitBoard(){
@@ -1104,7 +1127,7 @@ function render(){
     if(t.dropAnim){d.classList.add("drop");t.dropAnim=false;}
     if(glowTiles.indexOf(t)>=0)d.classList.add("hint");
     if(si>=0)d.setAttribute("data-ord",String(si+1));
-    hasStar=hasStar||(t.star&&!covered(t));
+    hasStar=hasStar||(t.star&&t.alive&&!t.dead&&!covered(t));
     hasStorm=hasStorm||t.dead||t.zombie;
     d.style.left=(t.x*TW+t.z*ZX+10)+"px";
     d.style.top=(t.y*TH+t.z*ZY+10)+"px";
@@ -1113,9 +1136,9 @@ function render(){
     d.addEventListener("pointerdown",function(e){e.preventDefault();tap(t,d);});
     t.el=d;b.appendChild(d);
   });
-  $("starbar").classList.toggle("on",hasStar);
-  $("ravenbar").classList.toggle("on",ravenCharms>0);
-  $("stormbar").classList.toggle("on",hasStorm);
+  flashBar("starbar",hasStar);
+  flashBar("ravenbar",ravenCharms>0);
+  flashBar("stormbar",hasStorm);
 }
 function renderTray(){
   var tr=$("tray");tr.innerHTML="";
@@ -1264,7 +1287,10 @@ function nextLevel(){
   clearTimeout(winTimer);
   $("winov").classList.add("hidden");
   if(friendMode){friendMode=false;showFriendDone();return;}
-  if(sponsorMode){sponsorMode=false;showAd();return;}
+  if(sponsorMode){
+    if(lvl+1>=10){sponsorMode=false;showAd();return;}
+    startLevel(lvl+1);return;
+  }
   if(!endlessMode&&lvl+1>=10){
     showMap();
     toast(AREAS[area].summit?"🏔️ THE SUMMIT! You climbed the whole Tilespell Trail! 🎉":
@@ -1280,7 +1306,7 @@ function levelWin(){
   var fastWords=Math.max(2,Math.round(effTarget/160));
   if(wordsMade.length<=fastWords)skill=Math.min(3,skill+1);
   else if(usedEmergency)skill=Math.max(0,skill-1);
-  pushLog((endlessMode?("E"+(lvl+1)):(sponsorMode?"SPONSOR":(friendMode?"FRIEND":("A"+(area+1)+"-L"+(lvl+1)))))+" clear "+score+"/"+effTarget+" · "+wordsMade.length+" words · "+Math.round((Date.now()-lvlStartTs)/1000)+"s");
+  pushLog((endlessMode?("E"+(lvl+1)):(sponsorMode?("SPONSOR-L"+(lvl+1)):(friendMode?"FRIEND":("A"+(area+1)+"-L"+(lvl+1)))))+" clear "+score+"/"+effTarget+" · "+wordsMade.length+" words · "+Math.round((Date.now()-lvlStartTs)/1000)+"s");
   track("level_complete",{level_id:levelId(),attempt_n:attemptN,duration_s:lvlSecs(),hints_used:lvlHintsUsed,boosters_used:lvlBoostersUsed,words:wordsMade.length,score:score,target:effTarget});
   lastLevelKey="";
   if(friendMode)track("board_completed",{words:FRIEND.words.length,theme_hits:themeHits,score:score});
@@ -1620,10 +1646,10 @@ function renderMap(){
   }
 }
 function startLevel(n){
-  lvl=n;curLevel=endlessMode?genEndless(n):(sponsorMode?genSponsor():(friendMode?genFriend():genAreaLevel(area,n)));lvlStartTs=Date.now();
+  lvl=n;curLevel=endlessMode?genEndless(n):(sponsorMode?genSponsor(n):(friendMode?genFriend():genAreaLevel(area,n)));lvlStartTs=Date.now();
   if(FORCE==="storm")curLevel.storm=true;
   seq=[];over=false;busy=false;hints=(sub?6:3);themeHits=0;wordsMade=[];stormFired=false;
-  glowTiles=[];stealFired=false;starDrops=0;gauntlet=false;gauntletTries=0;usedEmergency=false;tutStep=0;frozenScale=0;
+  glowTiles=[];stealFired=false;starDrops=0;gauntlet=false;gauntletTries=0;usedEmergency=false;tutStep=0;frozenScale=0;resetBars();
   var _lk=levelId();attemptN=(_lk===lastLevelKey)?attemptN+1:1;lastLevelKey=_lk;
   lvlHintsUsed=0;lvlBoostersUsed=0;
   track("level_start",{level_id:_lk,attempt_n:attemptN,boosters_owned:hints+peeks+places+removesBank});
@@ -1633,7 +1659,7 @@ function startLevel(n){
   $("hintbtn").style.display=(area>0||endlessMode||sponsorMode||friendMode||n>=3)?"flex":"none";
   $("areaico").textContent=endlessMode?"♾️":(sponsorMode?"📺":(friendMode?FRIEND.occ:AREAS[area].icon));
   $("lvlnum").textContent=(n+1);
-  $("lvltotal").textContent=endlessMode?" ∞":(sponsorMode?" ★":(friendMode?" 🎁":"/10"));
+  $("lvltotal").textContent=endlessMode?" ∞":(friendMode?" 🎁":"/10");
   $("target").textContent=effTarget;
   places=(L().places!==undefined)?L().places:3;
   peeks=(sub?3:2);
