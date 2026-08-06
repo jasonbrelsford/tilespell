@@ -64,7 +64,7 @@ header{display:flex;align-items:center;justify-content:space-between;gap:8px;pad
   border:2px solid #B39BE0;border-radius:999px;padding:4px 14px;margin:0 auto;
   box-shadow:0 3px 0 #37205C;}
 #ravenbar.on{display:flex;}
-#traywrap{display:flex;align-items:center;justify-content:center;}
+#traywrap{display:flex;align-items:center;justify-content:center;min-height:54px;}
 #tray{display:flex;gap:6px;align-items:center;}
 #actionrow{display:flex;gap:10px;align-items:center;justify-content:center;}
 #clearbtn{width:44px;height:44px;border-radius:50%;border:2px solid #fff;cursor:pointer;
@@ -220,9 +220,8 @@ header{display:flex;align-items:center;justify-content:space-between;gap:8px;pad
 #maphead{max-width:520px;margin:0 auto 14px;text-align:center;font-size:24px;font-weight:800;color:#2C5A1E;
   text-shadow:0 1px 0 rgba(255,255,255,.7);display:flex;flex-direction:column;gap:2px;}
 #maphead span{font-size:13px;font-weight:700;color:#4A7A3A;}
-#maptrail{max-width:400px;margin:0 auto;display:flex;flex-direction:column;gap:14px;align-items:center;position:relative;}
-#maptrail::before{content:"";position:absolute;top:10px;bottom:10px;left:50%;border-left:3px dotted rgba(70,110,50,.35);}
-.mnode{position:relative;z-index:1;width:min(320px,86vw);display:flex;align-items:center;gap:12px;
+#maptrail{max-width:400px;margin:0 auto;display:flex;flex-direction:column;gap:12px;align-items:center;position:relative;}
+.mnode{position:relative;z-index:1;width:min(280px,72vw);display:flex;align-items:center;gap:12px;
   background:linear-gradient(180deg,#FFFFFF,#F4EDDE);border:2.5px solid #fff;border-radius:18px;
   padding:11px 16px;cursor:pointer;box-shadow:0 5px 0 rgba(90,70,40,.25),0 8px 16px rgba(60,80,40,.18);}
 .mnode .mi{font-size:30px;flex:none;}
@@ -239,6 +238,11 @@ header{display:flex;align-items:center;justify-content:space-between;gap:8px;pad
 @keyframes curpulse{0%,100%{transform:scale(1)}50%{transform:scale(1.04)}}
 .mdots{position:relative;z-index:1;font-size:13px;font-weight:800;color:#4A7A3A;background:rgba(255,255,255,.7);
   border-radius:999px;padding:4px 14px;}
+.mnode.offl{margin-right:70px;}
+.mnode.offr{margin-left:70px;}
+.mcurve{width:min(320px,86vw);height:26px;margin:-8px 0;position:relative;z-index:0;}
+.mcurve svg{width:100%;height:100%;display:block;}
+.mcurve path{fill:none;stroke:rgba(70,110,50,.45);stroke-width:4;stroke-dasharray:.5 8.5;stroke-linecap:round;}
 #crow{position:fixed;top:0;left:0;z-index:2150;font-size:54px;pointer-events:none;display:none;
   filter:drop-shadow(0 5px 9px rgba(0,0,0,.4));}
 #crow.fly{display:block;animation:crowswoop 1.7s ease-in-out forwards;}
@@ -750,6 +754,52 @@ function beep(f,d,type,g){if(muted)return;try{AC=AC||new (window.AudioContext||w
  var o=AC.createOscillator(),v=AC.createGain();o.type=type||"sine";o.frequency.value=f;
  v.gain.setValueAtTime(g||.12,AC.currentTime);v.gain.exponentialRampToValueAtTime(.0001,AC.currentTime+(d||.15));
  o.connect(v);v.connect(AC.destination);o.start();o.stop(AC.currentTime+(d||.15));}catch(e){}}
+/* Generative garden music — no audio asset (file stays light). A soft pentatonic
+   music-box melody wanders over a low two-note pad; obeys the mute button and goes
+   silent when the app is backgrounded. Starts on the first touch (iOS gesture rule). */
+var musicStarted=false,musicTimer=null,musicNext=0,musPrev=3,padNodes=null;
+var PENT=[261.63,293.66,329.63,392.00,440.00,523.25,587.33,659.25];
+function musicNote(t){
+  var o=AC.createOscillator(),v=AC.createGain();
+  var move=[-2,-1,-1,0,1,1,2][Math.floor(Math.random()*7)];
+  musPrev=Math.max(0,Math.min(PENT.length-1,musPrev+move));
+  o.type="triangle";o.frequency.value=PENT[musPrev];
+  v.gain.setValueAtTime(0,t);
+  v.gain.linearRampToValueAtTime(0.05,t+0.02);
+  v.gain.exponentialRampToValueAtTime(0.0001,t+0.95);
+  o.connect(v);v.connect(AC.destination);o.start(t);o.stop(t+1);
+}
+function stopPad(){
+  if(!padNodes)return;
+  try{padNodes.o1.stop();padNodes.o2.stop();padNodes.g.disconnect();}catch(e){}
+  padNodes=null;
+}
+function musicTick(){
+  if(!AC||muted||document.hidden||AC.state==="suspended"){stopPad();return;}
+  if(!padNodes){
+    var g=AC.createGain();g.gain.value=0.016;
+    var o1=AC.createOscillator(),o2=AC.createOscillator();
+    o1.type="sine";o2.type="sine";o1.frequency.value=130.81;o2.frequency.value=196.00;
+    o1.connect(g);o2.connect(g);g.connect(AC.destination);o1.start();o2.start();
+    padNodes={g:g,o1:o1,o2:o2};
+  }
+  var now=AC.currentTime;
+  if(musicNext<now)musicNext=now+0.1;
+  while(musicNext<now+0.7){
+    if(Math.random()<0.5)musicNote(musicNext);
+    musicNext+=0.416;
+  }
+}
+function startMusic(){
+  if(musicStarted)return;
+  musicStarted=true;
+  try{
+    AC=AC||new (window.AudioContext||window.webkitAudioContext)();
+    if(AC.state==="suspended")AC.resume();
+    musicTimer=setInterval(musicTick,300);
+  }catch(e){}
+}
+document.addEventListener("pointerdown",startMusic,{once:true});
 function sClick(){beep(520,.06,"triangle",.06);}
 function sWord(n){for(var i=0;i<n;i++)(function(i){setTimeout(function(){beep(600+i*90,.12,"sine",.12);},i*70);})(i);}
 function sTheme(){[660,830,990,1320].forEach(function(f,i){setTimeout(function(){beep(f,.15,"sine",.13);},i*80);});}
@@ -1014,17 +1064,26 @@ function ensurePlayable(){
 }
 function notCovered(t){return t.alive&&!covered(t);}
 
+var frozenScale=0;
 function fitBoard(){
+  /* Scale is computed once per level and frozen — the tray filling up, banner bars
+     toggling, and toasts all reflow the layout, and re-fitting on every render made
+     the whole mat bob up and down (Jason, 2026-08-06). Window resize unfreezes. */
   var b=$("board"),wrap=$("boardwrap");
   var w=parseFloat(b.style.width)||0,h=parseFloat(b.style.height)||0;
   if(!w||!h)return;
-  var availW=Math.min(wrap.clientWidth,document.documentElement.clientWidth-36)-24;
-  var availH=wrap.clientHeight-24;
-  if(availW<=0||availH<=0)return;
-  var scale=Math.min(availW/w,availH/h,1.55);
+  var scale=frozenScale;
+  if(!scale){
+    var availW=Math.min(wrap.clientWidth,document.documentElement.clientWidth-36)-24;
+    var availH=wrap.clientHeight-24;
+    if(availW<=0||availH<=0)return;
+    scale=Math.min(availW/w,availH/h,1.55);
+    frozenScale=scale;
+  }
   if("zoom" in b.style){b.style.zoom=scale;b.style.transform="";}
   else{b.style.transform="scale("+scale+")";}
 }
+window.addEventListener("resize",function(){frozenScale=0;fitBoard();});
 function render(){
   var b=$("board");b.innerHTML="";
   var maxX=0,maxY=0;
@@ -1242,9 +1301,13 @@ function levelWin(){
     $("wintheme").textContent=t?(themeHits>=L().goal?(storyMode?"Lost words found ✔":"Theme goal ✔"):((storyMode?"Lost words ":"Theme words ")+themeHits+"/"+L().goal)):"";
     $("winbank").textContent="✂️ +1 Remove banked ("+removesBank+")"+(ravenCharms>0?" · 🪶 feather carried":"");
     var earned=30+Math.floor(score/10);
+    /* hints are free each level but not free money: each one used taxes the win at
+       the shop rate (20/hint), so hint-spamming can never be coin-positive */
+    var hintTax=Math.min(20*lvlHintsUsed,Math.max(0,earned-10));
+    earned-=hintTax;
     coinBank+=earned;updateCoins();
-    track("currency_earned",{amount:earned,balance_after:coinBank,source:"level_reward"});
-    $("wincoins").textContent="🪙 +"+earned+" coins";
+    track("currency_earned",{amount:earned,balance_after:coinBank,source:"level_reward",hint_tax:hintTax});
+    $("wincoins").textContent="🪙 +"+earned+" coins"+(hintTax?" (💡 −"+hintTax+")":"");
     $("winov").classList.remove("hidden");
     winTimer=setTimeout(nextLevel,2400);
   },700);
@@ -1509,9 +1572,20 @@ function showAd(){
 }
 function renderMap(){
   var m=$("maptrail");m.innerHTML="";
+  var nodeIdx=0;
+  function curve(toRight){
+    var w=document.createElement("div");w.className="mcurve";
+    w.innerHTML=toRight
+      ?'<svg viewBox="0 0 100 26" preserveAspectRatio="none"><path d="M 39 0 C 39 14, 61 12, 61 26"/></svg>'
+      :'<svg viewBox="0 0 100 26" preserveAspectRatio="none"><path d="M 61 0 C 61 14, 39 12, 39 26"/></svg>';
+    return w;
+  }
   function node(cls,html,onclick){
     var d=document.createElement("div");d.className="mnode "+cls;d.innerHTML=html;
     if(onclick)d.addEventListener("click",onclick);
+    if(m.children.length)m.appendChild(curve(nodeIdx%2===1));
+    d.classList.add(nodeIdx%2===1?"offr":"offl");
+    nodeIdx++;
     m.appendChild(d);return d;
   }
   function dots(txt){var d=document.createElement("div");d.className="mdots";d.textContent=txt;m.appendChild(d);}
@@ -1549,7 +1623,7 @@ function startLevel(n){
   lvl=n;curLevel=endlessMode?genEndless(n):(sponsorMode?genSponsor():(friendMode?genFriend():genAreaLevel(area,n)));lvlStartTs=Date.now();
   if(FORCE==="storm")curLevel.storm=true;
   seq=[];over=false;busy=false;hints=(sub?6:3);themeHits=0;wordsMade=[];stormFired=false;
-  glowTiles=[];stealFired=false;starDrops=0;gauntlet=false;gauntletTries=0;usedEmergency=false;tutStep=0;
+  glowTiles=[];stealFired=false;starDrops=0;gauntlet=false;gauntletTries=0;usedEmergency=false;tutStep=0;frozenScale=0;
   var _lk=levelId();attemptN=(_lk===lastLevelKey)?attemptN+1:1;lastLevelKey=_lk;
   lvlHintsUsed=0;lvlBoostersUsed=0;
   track("level_start",{level_id:_lk,attempt_n:attemptN,boosters_owned:hints+peeks+places+removesBank});
