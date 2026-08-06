@@ -267,6 +267,24 @@ textarea.mkin{min-height:58px;resize:vertical;}
 .occbtn.sel{border-color:#FF4FA0;background:#FFE9F4;}
 .mkcount{font-size:12px;font-weight:700;color:var(--ink-soft);text-align:left;margin:-4px 0 8px;}
 #mkov .card{max-height:88vh;overflow-y:auto;}
+#storyov{position:fixed;inset:0;z-index:2400;display:flex;align-items:center;justify-content:center;
+  background:linear-gradient(180deg,var(--sky-a),var(--sky-b) 62%);padding:24px;}
+#storyscene{display:flex;flex-direction:column;align-items:center;gap:18px;text-align:center;max-width:340px;position:relative;z-index:1;}
+.stitle{display:flex;gap:6px;justify-content:center;flex-wrap:wrap;}
+.stile{width:44px;height:56px;border-radius:11px;display:flex;align-items:center;justify-content:center;
+  font-weight:800;font-size:27px;color:#5E4A9E;background:linear-gradient(180deg,#FFFEF6 0%,#FFF3D3 70%,#F5DFA6 100%);
+  border:1px solid #EACF8C;border-bottom:5px solid #DDB662;box-shadow:0 5px 7px rgba(0,10,20,.3);}
+.stile:nth-child(odd){transform:rotate(-6deg) translateY(3px);}
+.stile:nth-child(even){transform:rotate(4deg) translateY(-2px);}
+#storysub{font-weight:800;color:var(--ink-soft);font-size:15px;letter-spacing:.04em;}
+.sbee{font-size:58px;filter:drop-shadow(0 5px 9px rgba(40,20,60,.3));animation:breathe 2.4s infinite;}
+.sraven{font-size:52px;transform:scaleX(-1);filter:drop-shadow(0 4px 9px rgba(20,10,30,.4));}
+.sspeech{background:linear-gradient(180deg,#FFFEF6,#FFF6DE);border-radius:18px;padding:15px 17px;
+  font-weight:700;font-size:16px;line-height:1.5;color:var(--ink);
+  box-shadow:0 8px 20px rgba(60,30,80,.25),0 0 0 4px #FFF3D0,0 0 0 6px #D9B36A;}
+#storyskip{position:absolute;top:16px;right:18px;z-index:2;background:none;border:none;font-weight:800;
+  color:var(--ink-soft);font-size:13px;cursor:pointer;padding:8px;}
+.strail{position:absolute;font-weight:800;color:#5E4A9E;opacity:.6;pointer-events:none;}
 </style>
 
 <div id="decor">
@@ -366,6 +384,7 @@ textarea.mkin{min-height:58px;resize:vertical;}
     <button class="btn" id="retrybtn">Retry level</button><br>
     <button class="btn" id="copylog" style="font-size:14px;padding:9px 18px;">📋 Copy playtest log</button>
     <button class="btn hidden" id="savelog" style="font-size:14px;padding:9px 18px;">💾 Save log file</button><br>
+    <button class="btn" id="storybtn" style="font-size:14px;padding:9px 18px;">📖 Replay the story</button><br>
     <button class="btn" id="cancelover" style="background:none;box-shadow:none;border:none;color:var(--ink-soft);text-shadow:none;">Keep playing</button>
   </div>
 </div>
@@ -425,6 +444,16 @@ textarea.mkin{min-height:58px;resize:vertical;}
     <p id="mkhint" style="font-size:12px;text-align:center;margin:8px 0 0;"></p>
     <button class="btn" id="mkclose" style="background:none;box-shadow:none;border:none;color:var(--ink-soft);text-shadow:none;width:100%;">Close</button>
   </div>
+</div>
+
+<div id="storyov" class="hidden">
+  <button id="storyskip">skip ›</button>
+  <span class="strail" style="top:13%;left:15%;font-size:16px;transform:rotate(-13deg);">W</span>
+  <span class="strail" style="top:20%;left:35%;font-size:13px;transform:rotate(8deg);">O</span>
+  <span class="strail" style="top:11%;left:52%;font-size:17px;transform:rotate(-5deg);">R</span>
+  <span class="strail" style="top:18%;left:68%;font-size:12px;transform:rotate(11deg);">D</span>
+  <span class="strail" style="top:9%;left:81%;font-size:14px;transform:rotate(-9deg);">S</span>
+  <div id="storyscene"></div>
 </div>
 
 <script>
@@ -527,6 +556,18 @@ var FRIEND=(function(){
   }catch(e){return null;}
 })();
 if(FRIEND)THEMES.friend={icon:FRIEND.occ,name:(FRIEND.from?FRIEND.from+"'s":"Friend")+" words",words:FRIEND.words};
+/* Public play URL (GitHub Pages). Share links must use a real, openable address —
+   inside the claude.ai artifact frame, location.origin is an internal host that 403s
+   when opened directly (learned the hard way, 2026-08-05). */
+var PLAY_URL="https://jasonbrelsford.github.io/tilespell/";
+function shareBase(){
+  try{
+    var h=location.hostname;
+    if(location.protocol.indexOf("http")===0&&h&&h.indexOf("claudeusercontent")<0&&h.indexOf("claude.ai")<0&&h!=="localhost"&&h!=="127.0.0.1")
+      return location.origin+location.pathname;
+  }catch(e){}
+  return PLAY_URL;
+}
 var SEASON=(function(){
   try{var f=new URLSearchParams(location.search).get("season");if(f)return f;}catch(e){}
   var d=new Date(),m=d.getMonth();
@@ -589,8 +630,8 @@ var AREAS=[
 /*__AREAS_GEN_END__*/
 if(SEASON==="halloween")AREAS.push({name:"Haunted Hollow",icon:"🎃",theme:"halloween",pal:9,seasonal:true,storm:true});
 var BASE_TARGETS=[70,150,200,240,280,360,450,480,560,700];
-var AREA0_TOASTS=[null,"Tap a picked letter to un-pick it","Clear the top tiles to reach below","💡 Hints unlocked",null,
- "🎁 Places get scarce — spend them well",null,"🌙 Night rule: 4+ letter words only!",null,"🌟 Area finale!"];
+var AREA0_TOASTS=[null,"🐝 Tap a picked letter to un-pick it","🐝 Clear the top tiles — more words hide below","💡 Hints unlocked — I'll point one out when you're stuck",null,
+ "🎁 Places get scarce — spend them well",null,"🌙 Night rule: 4+ letter words only!",null,"🌟 The last patch of the garden!"];
 function rowRect(x0,x1,y0,y1,z){var a=[];for(var y=y0;y<=y1;y+=1)for(var x=x0;x<=x1;x+=1)a.push({x:x,y:y,z:z});return a;}
 var LEVELS=[
  {target:70, pos:rowRect(0,4,0,3,0).concat(rowRect(1,3,1,2,1)).concat([{x:2,y:1,z:2}]), tut:true},
@@ -848,7 +889,7 @@ function genAreaLevel(a,i){
   if(a>=2&&i>=8)cfg.bury=true;
   if(A.storm||(a>=2&&i===5))cfg.storm=true;
   if(a===0){cfg.tut=(i===0);cfg.toast=AREA0_TOASTS[i];}
-  else if(i===0)cfg.toast=A.icon+" Welcome to "+A.name+"!"+(A.lang?" "+(A.langName||"Theme")+" words score ×2 — learn as you spell!":"");
+  else if(i===0)cfg.toast="🐝 "+A.name+"! I can hear its lost words waiting… "+A.icon+(A.lang?" "+(A.langName||"Its")+" words came from far away — ×2 when they come home!":"");
   if(A.summit&&i===9)cfg.toast="🏔️ The last level of the Trail — the very top!";
   return cfg;
 }
@@ -1034,7 +1075,8 @@ function renderTheme(){
   var t=theme(),tb=$("themebar");
   if(!t){tb.className="";tb.classList.remove("on");return;}
   tb.classList.add("on");
-  $("themelabel").textContent=t.icon+" "+t.name+" · ×2";
+  var keepName=endlessMode||sponsorMode||friendMode||!!t.trans;
+  $("themelabel").textContent=t.icon+" "+(keepName?t.name:"Lost words")+" · ×2";
   $("themeprog").textContent=themeHits+"/"+L().goal;
 }
 function setScore(n){score=n;$("score").textContent=n;
@@ -1076,7 +1118,7 @@ function tap(t,el){
     setCounts();render();renderTray();sWord(2);
     if(area===0&&!endlessMode&&!sponsorMode&&!friendMode&&lvl===0&&tutStep===2){
       tutStep=3;$("removebtn").classList.remove("tut");
-      toast("You've got all the tools — now reach the target! 🌟",3200);
+      toast("🐝 You've got all the tools — fill the bar and this patch blooms! 🌼",3200);
     }
     ensurePlayable();
     return;
@@ -1133,7 +1175,7 @@ function submitWord(){
     if(area===0&&!endlessMode&&!sponsorMode&&!friendMode&&lvl===0&&tutStep===0){
       tutStep=1;
       track("ftue_step",{step:"peek_prompt",elapsed_s:lvlSecs()});
-      setTimeout(function(){if(over)return;toast("✨ Nice! Now tap 👁️ Peek to see under the stacks",3400);
+      setTimeout(function(){if(over)return;toast("🐝 Lovely! Now tap 👁️ Peek to see under the stacks",3400);
         $("peekbtn").classList.add("tut");},1300);
     }
     if(!stealFired&&(area>0||endlessMode||sponsorMode||lvl>=2||FORCE==="raven")&&(score>=effTarget*0.5||FORCE==="raven")&&wordsMade.length<=3){
@@ -1194,9 +1236,10 @@ function levelWin(){
   }
   setTimeout(function(){
     var t=theme();
-    $("wintitle").textContent=t?(t.icon+" "+t.name+" done!"):("Level "+(lvl+1)+" clear!");
-    $("winwords").textContent=wordsMade.slice(-5).join(" · ");
-    $("wintheme").textContent=t?(themeHits>=L().goal?"Theme goal ✔":("Theme words "+themeHits+"/"+L().goal)):"";
+    var storyMode=!endlessMode&&!sponsorMode&&!friendMode;
+    $("wintitle").textContent=t?(storyMode?(t.icon+" The words came home!"):(t.icon+" "+t.name+" done!")):("Level "+(lvl+1)+" clear!");
+    $("winwords").textContent=(storyMode?"remembered: ":"")+wordsMade.slice(-5).join(" · ");
+    $("wintheme").textContent=t?(themeHits>=L().goal?(storyMode?"Lost words found ✔":"Theme goal ✔"):((storyMode?"Lost words ":"Theme words ")+themeHits+"/"+L().goal)):"";
     $("winbank").textContent="✂️ +1 Remove banked ("+removesBank+")"+(ravenCharms>0?" · 🪶 feather carried":"");
     var earned=30+Math.floor(score/10);
     coinBank+=earned;updateCoins();
@@ -1246,7 +1289,7 @@ function doPeek(){
   if(area===0&&!endlessMode&&!sponsorMode&&!friendMode&&lvl===0&&tutStep===1){
     tutStep=2;$("peekbtn").classList.remove("tut");
     track("ftue_step",{step:"remove_prompt",elapsed_s:lvlSecs()});
-    setTimeout(function(){if(over)return;toast("Now ✂️ Remove — snip away a tile that blocks you",3400);
+    setTimeout(function(){if(over)return;toast("🐝 Now ✂️ Remove — snip away a tile that blocks you",3400);
       $("removebtn").classList.add("tut");},4000);
   }
   setTimeout(function(){
@@ -1318,7 +1361,7 @@ function runTutorial(){
   var w=tutTiles._word||tutTiles.map(function(t){return t.ch;}).join("");
   glowTiles=tutTiles.slice();
   setTimeout(function(){
-    toast("Spell "+w+" — tap the glowing letters in order",3500);
+    toast("🐝 Tap the glowing letters in order — spell "+w+" back into the garden!",3600);
     render();
   },500);
 }
@@ -1398,7 +1441,7 @@ function openMaker(src){
 function buildBoardLink(){
   var o={t:($("mkto").value||"").trim().slice(0,20),f:($("mkfrom").value||"").trim().slice(0,20),
     o:mkOcc,m:($("mkmsg").value||"").trim().slice(0,90),w:mkWords()};
-  return location.origin+location.pathname+"?board="+b64e(JSON.stringify(o));
+  return shareBase()+"?board="+b64e(JSON.stringify(o));
 }
 function legacyCopy(s){
   var ta=document.createElement("textarea");ta.value=s;
@@ -1410,6 +1453,46 @@ function copyText(s,done){
   if(navigator.clipboard&&navigator.clipboard.writeText)
     navigator.clipboard.writeText(s).then(function(){done("copy");},function(){legacyCopy(s);done("copy");});
   else{legacyCopy(s);done("copy");}
+}
+/* ---- Story opening (P1): The Raven Stole the Words — specs/story-throughline.md §7 ---- */
+function storySeen(){try{return !!localStorage.getItem("tsp_story");}catch(e){return true;}}
+var storyStep=0,storyCb=null,storyTimer=null;
+var STORY_SCENES=[
+ function(){return '<div class="stitle">'+"TILE".split("").map(function(c){return '<div class="stile">'+c+'</div>';}).join("")+'</div>'
+   +'<div class="stitle">'+"SPELL".split("").map(function(c){return '<div class="stile">'+c+'</div>';}).join("")+'</div>'
+   +'<div id="storysub">the trail lost its words…</div>';},
+ function(){return '<div class="sbee">🐝</div>'
+   +'<div class="sspeech">"Oh! A visitor — thank goodness. I\'m <b>Poppy</b>, keeper of the garden\'s words."</div>'
+   +'<button class="btn gold" id="storynext1">Hello, Poppy</button>';},
+ function(){return '<div class="sraven">🐦‍⬛</div>'
+   +'<div class="sspeech">"The <b>Raven</b> flew off with every word we had — look, just jumbled letters left! Help me spell them back?"</div>'
+   +'<button class="btn gold" id="storynext2">Let\'s spell 🌼</button>';}
+];
+function renderStory(){
+  var sc=$("storyscene");sc.innerHTML=STORY_SCENES[storyStep]();
+  clearTimeout(storyTimer);
+  if(storyStep===0)storyTimer=setTimeout(function(){
+    if(storyStep===0&&!$("storyov").classList.contains("hidden"))storyAdvance();},2300);
+  if(storyStep===1)$("storynext1").addEventListener("click",function(e){e.stopPropagation();storyAdvance();});
+  if(storyStep===2)$("storynext2").addEventListener("click",function(e){e.stopPropagation();endStory();});
+}
+function storyAdvance(){
+  storyStep++;
+  if(storyStep>2){endStory();return;}
+  track("ftue_step",{step:"story_s"+storyStep,elapsed_s:0});
+  renderStory();
+}
+function showStory(cb){
+  storyCb=cb;storyStep=0;
+  pushLog("STORY opening shown");track("ftue_step",{step:"story_open"});
+  $("storyov").classList.remove("hidden");renderStory();
+}
+function endStory(){
+  clearTimeout(storyTimer);
+  try{localStorage.setItem("tsp_story","1");}catch(e){}
+  $("storyov").classList.add("hidden");
+  var cb=storyCb;storyCb=null;
+  if(cb)cb();
 }
 var adTimer=null;
 function showAd(){
@@ -1589,10 +1672,15 @@ $("adupsell").addEventListener("click",function(){pushLog("SUB upsell tapped fro
 $("subopen").addEventListener("click",function(){if(sub){toast("⭐ Tilespell+ is active — enjoy!");return;}pushLog("SUB screen opened from map");track("iap_impression",{placement:"map",sku:"tilespell_plus"});$("subov").classList.remove("hidden");});
 $("subclose").addEventListener("click",function(){pushLog("SUB declined");$("subov").classList.add("hidden");});
 $("giftplay").addEventListener("click",function(){$("giftov").classList.add("hidden");enterFriend();});
-$("giftskip").addEventListener("click",function(){$("giftov").classList.add("hidden");showMap();});
+$("giftskip").addEventListener("click",function(){$("giftov").classList.add("hidden");
+  if(!storySeen()&&!AUTOPLAY)showStory(function(){showMap();});else showMap();});
 $("fdmake").addEventListener("click",function(){$("fdoneov").classList.add("hidden");openMaker("friend_done");});
-$("fdexplore").addEventListener("click",function(){$("fdoneov").classList.add("hidden");showMap();});
+$("fdexplore").addEventListener("click",function(){$("fdoneov").classList.add("hidden");
+  if(!storySeen()&&!AUTOPLAY)showStory(function(){showMap();});else showMap();});
 $("mkclose").addEventListener("click",function(){$("mkov").classList.add("hidden");});
+$("storyskip").addEventListener("click",function(e){e.stopPropagation();endStory();});
+$("storyov").addEventListener("click",function(){if(storyStep===0)storyAdvance();});
+$("storybtn").addEventListener("click",function(){$("overov").classList.add("hidden");showStory(null);});
 $("mkwords").addEventListener("input",mkUpdate);
 Array.prototype.forEach.call(document.querySelectorAll(".occbtn"),function(b){
   b.addEventListener("click",function(){
@@ -1643,6 +1731,7 @@ if(AUTOPLAY){
     setInterval(function(){
       if(vis("mapscr")){plan=[];mapIdle++;if(mapIdle>=3){mapIdle=0;enterArea(Math.min(prog.a,AREAS.length-1));}return;}
       mapIdle=0;
+      if(vis("storyov")){$("storyskip").click();return;}
       if(vis("giftov")){$("giftplay").click();return;}
       if(vis("fdoneov")){$("fdexplore").click();return;}
       if(vis("mkov")){$("mkclose").click();return;}
@@ -1672,7 +1761,12 @@ document.addEventListener("visibilitychange",function(){
   else if(bgTs)track("app_foreground",{resume_after_s:Math.round((Date.now()-bgTs)/1000)});
 });
 loadCaw();
-if(FRIEND)showGift();else showMap();
+if(FRIEND)showGift();
+else if(!storySeen()&&!AUTOPLAY)showStory(function(){
+  if(prog.a===0&&prog.l===0&&!prog.done.length)enterArea(0);
+  else showMap();
+});
+else showMap();
 })();
 </script>
 
