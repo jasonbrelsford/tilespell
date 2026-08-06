@@ -357,7 +357,7 @@ textarea.mkin{min-height:58px;resize:vertical;}
   <div class="card">
     <div class="big">⭐</div>
     <h2>Tilespell+</h2>
-    <p style="text-align:left;">✔ No sponsor breaks, ever<br>✔ <b>Double hint earnings</b> — +2 banked per level win<br>✔ +1 Peek every level<br>✔ Subscriber boards: language &amp; study paths <i>(coming soon)</i></p>
+    <p style="text-align:left;">✔ No sponsor breaks, ever<br>✔ <b>Half-price hints</b> — 5% of your coins instead of 10%<br>✔ +1 Peek every level<br>✔ Subscriber boards: language &amp; study paths <i>(coming soon)</i></p>
     <p style="font-size:13px;">$4.99/month · mock trial for playtesting — no real charge</p>
     <button class="btn gold" id="subbtn">Start free trial</button>
     <button class="btn" id="subclose" style="background:none;box-shadow:none;border:none;color:var(--ink-soft);text-shadow:none;">Not now</button>
@@ -739,11 +739,14 @@ function buildReport(){
     "---\n"+plog.join("\n");
 }
 var PRICES={
-  hint:{n:3,cost:60,icon:"💡",title:"3 Hints"},
   place:{n:1,cost:50,icon:"🎁",title:"1 Place"},
   remove:{n:1,cost:75,icon:"✂️",title:"1 Remove"},
   peek:{n:2,cost:40,icon:"👁️",title:"2 Peeks"}
 };
+/* Hints cost a cut of your wallet (Jason 2026-08-06, third pass — flat banks and
+   taxes were both farmable): 10% of current coins per hint, 5% with Tilespell+.
+   Scales with wealth, never free, always roughly affordable. */
+function hintCost(){return Math.max(1,Math.ceil(coinBank*(sub?0.05:0.10)));}
 function updateCoins(){$("coinsview").textContent=coinBank;setCounts();}
 function openBuy(kind){
   buyKind=kind;var P=PRICES[kind];
@@ -1168,8 +1171,8 @@ function setCounts(){
   $("placecnt").textContent=places;
   $("removecnt").textContent=removesBank;
   $("peekcnt").textContent=peeks;
-  $("hintcnt").textContent=hints;
-  $("hintbtn").classList.toggle("zero",hints<=0);
+  $("hintcnt").textContent=hintCost()+"🪙";
+  $("hintbtn").classList.toggle("zero",coinBank<hintCost());
   $("placebtn").classList.toggle("zero",places<=0);
   $("removebtn").classList.toggle("zero",removesBank<=0);
   $("peekbtn").classList.toggle("zero",peeks<=0);
@@ -1303,7 +1306,6 @@ function levelWin(){
   over=true;sWin();
   seq=[];
   removesBank++;
-  hints+=(sub?2:1);
   var fastWords=Math.max(2,Math.round(effTarget/160));
   if(wordsMade.length<=fastWords)skill=Math.min(3,skill+1);
   else if(usedEmergency)skill=Math.max(0,skill-1);
@@ -1326,7 +1328,7 @@ function levelWin(){
     $("wintitle").textContent=t?(storyMode?(t.icon+" The words came home!"):(t.icon+" "+t.name+" done!")):("Level "+(lvl+1)+" clear!");
     $("winwords").textContent=(storyMode?"remembered: ":"")+wordsMade.slice(-5).join(" · ");
     $("wintheme").textContent=t?(themeHits>=L().goal?(storyMode?"Lost words found ✔":"Theme goal ✔"):((storyMode?"Lost words ":"Theme words ")+themeHits+"/"+L().goal)):"";
-    $("winbank").textContent="✂️ +1 Remove · 💡 +"+(sub?2:1)+" Hint banked"+(ravenCharms>0?" · 🪶 feather carried":"");
+    $("winbank").textContent="✂️ +1 Remove banked ("+removesBank+")"+(ravenCharms>0?" · 🪶 feather carried":"");
     var earned=30+Math.floor(score/10);
     coinBank+=earned;updateCoins();
     track("currency_earned",{amount:earned,balance_after:coinBank,source:"level_reward"});
@@ -1337,10 +1339,12 @@ function levelWin(){
 }
 function doHint(){
   if(busy||over)return;
-  if(hints<=0){openBuy("hint");return;}
+  var cost=hintCost();
+  if(coinBank<cost){toast("💡 A hint costs "+(sub?"5":"10")+"% of your coins — spell words to earn some 🪙");return;}
   var w=formableBest();
   if(!w){ensurePlayable();return;}
-  hints--;setCounts();
+  coinBank-=cost;updateCoins();
+  track("currency_spent",{amount:cost,balance_after:coinBank,sink:"hint"});
   lvlHintsUsed++;lvlBoostersUsed++;track("booster_used",{booster:"hint",level_id:levelId()});
   var free=tiles.filter(isFree),used=[];
   for(var i=0;i<w.length;i++){
@@ -1651,7 +1655,7 @@ function startLevel(n){
   glowTiles=[];stealFired=false;starDrops=0;gauntlet=false;gauntletTries=0;usedEmergency=false;tutStep=0;frozenScale=0;resetBars();
   var _lk=levelId();attemptN=(_lk===lastLevelKey)?attemptN+1:1;lastLevelKey=_lk;
   lvlHintsUsed=0;lvlBoostersUsed=0;
-  track("level_start",{level_id:_lk,attempt_n:attemptN,boosters_owned:hints+peeks+places+removesBank});
+  track("level_start",{level_id:_lk,attempt_n:attemptN,boosters_owned:peeks+places+removesBank,coins:coinBank});
   $("peekbtn").classList.remove("tut");$("removebtn").classList.remove("tut");
   applyPalette(endlessMode?n:(sponsorMode?2:(friendMode?3:AREAS[area].pal)));
   effTarget=Math.round(L().target*(1+0.12*skill)/10)*10;
@@ -1697,7 +1701,7 @@ function featherLesson(){
 }
 
 $("winov").addEventListener("pointerdown",nextLevel);
-$("replaybtn").addEventListener("click",function(){$("doneov").classList.add("hidden");allWords=[];removesBank=1;hints=3;skill=0;coinBank=0;ravenCharms=0;updateCoins();startLevel(0);});
+$("replaybtn").addEventListener("click",function(){$("doneov").classList.add("hidden");allWords=[];removesBank=1;skill=0;coinBank=0;ravenCharms=0;updateCoins();startLevel(0);});
 $("buycancel").addEventListener("click",function(){$("buyov").classList.add("hidden");buyKind=null;});
 $("buyconfirm").addEventListener("click",function(){
   var P=PRICES[buyKind];
@@ -1706,8 +1710,7 @@ $("buyconfirm").addEventListener("click",function(){
   if(coinBank<P.cost){toast("Not enough coins — clear levels to earn more! 🪙");buyKind=null;return;}
   coinBank-=P.cost;updateCoins();
   track("currency_spent",{amount:P.cost,balance_after:coinBank,sink:"booster",booster:buyKind});
-  if(buyKind==="hint")hints+=P.n;
-  else if(buyKind==="place")places+=P.n;
+  if(buyKind==="place")places+=P.n;
   else if(buyKind==="remove")removesBank+=P.n;
   else if(buyKind==="peek")peeks+=P.n;
   setCounts();sWord(3);
@@ -1802,11 +1805,11 @@ $("subbtn").addEventListener("click",function(){
   sub=true;try{localStorage.setItem("tsp_sub","1");}catch(e){}
   pushLog("SUB mock-subscribed");
   track("purchase",{sku:"tilespell_plus",mock:true,placement:"sub_screen"});
-  hints+=3;peeks=Math.max(peeks,3);setCounts();
+  peeks=Math.max(peeks,3);setCounts();
   $("subov").classList.add("hidden");$("adov").classList.add("hidden");
   clearInterval(adTimer);
   $("subopen").textContent="⭐ Tilespell+ active";
-  toast("⭐ Tilespell+ active — double hints, no sponsor breaks!");
+  toast("⭐ Tilespell+ active — half-price hints, no sponsor breaks!");
   if(!$("adov").classList.contains("hidden")||over)showMap();
 });
 /* Demo autoplay for ad-footage capture: ?autoplay=1 (combines with ?force= and
