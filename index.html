@@ -357,7 +357,7 @@ textarea.mkin{min-height:58px;resize:vertical;}
   <div class="card">
     <div class="big">⭐</div>
     <h2>Tilespell+</h2>
-    <p style="text-align:left;">✔ No sponsor breaks, ever<br>✔ <b>Double hints</b> every level (6 instead of 3)<br>✔ +1 Peek every level<br>✔ Subscriber boards: language &amp; study paths <i>(coming soon)</i></p>
+    <p style="text-align:left;">✔ No sponsor breaks, ever<br>✔ <b>Double hint earnings</b> — +2 banked per level win<br>✔ +1 Peek every level<br>✔ Subscriber boards: language &amp; study paths <i>(coming soon)</i></p>
     <p style="font-size:13px;">$4.99/month · mock trial for playtesting — no real charge</p>
     <button class="btn gold" id="subbtn">Start free trial</button>
     <button class="btn" id="subclose" style="background:none;box-shadow:none;border:none;color:var(--ink-soft);text-shadow:none;">Not now</button>
@@ -1303,6 +1303,7 @@ function levelWin(){
   over=true;sWin();
   seq=[];
   removesBank++;
+  hints+=(sub?2:1);
   var fastWords=Math.max(2,Math.round(effTarget/160));
   if(wordsMade.length<=fastWords)skill=Math.min(3,skill+1);
   else if(usedEmergency)skill=Math.max(0,skill-1);
@@ -1325,15 +1326,11 @@ function levelWin(){
     $("wintitle").textContent=t?(storyMode?(t.icon+" The words came home!"):(t.icon+" "+t.name+" done!")):("Level "+(lvl+1)+" clear!");
     $("winwords").textContent=(storyMode?"remembered: ":"")+wordsMade.slice(-5).join(" · ");
     $("wintheme").textContent=t?(themeHits>=L().goal?(storyMode?"Lost words found ✔":"Theme goal ✔"):((storyMode?"Lost words ":"Theme words ")+themeHits+"/"+L().goal)):"";
-    $("winbank").textContent="✂️ +1 Remove banked ("+removesBank+")"+(ravenCharms>0?" · 🪶 feather carried":"");
+    $("winbank").textContent="✂️ +1 Remove · 💡 +"+(sub?2:1)+" Hint banked"+(ravenCharms>0?" · 🪶 feather carried":"");
     var earned=30+Math.floor(score/10);
-    /* hints are free each level but not free money: each one used taxes the win at
-       the shop rate (20/hint), so hint-spamming can never be coin-positive */
-    var hintTax=Math.min(20*lvlHintsUsed,Math.max(0,earned-10));
-    earned-=hintTax;
     coinBank+=earned;updateCoins();
-    track("currency_earned",{amount:earned,balance_after:coinBank,source:"level_reward",hint_tax:hintTax});
-    $("wincoins").textContent="🪙 +"+earned+" coins"+(hintTax?" (💡 −"+hintTax+")":"");
+    track("currency_earned",{amount:earned,balance_after:coinBank,source:"level_reward"});
+    $("wincoins").textContent="🪙 +"+earned+" coins";
     $("winov").classList.remove("hidden");
     winTimer=setTimeout(nextLevel,2400);
   },700);
@@ -1648,7 +1645,9 @@ function renderMap(){
 function startLevel(n){
   lvl=n;curLevel=endlessMode?genEndless(n):(sponsorMode?genSponsor(n):(friendMode?genFriend():genAreaLevel(area,n)));lvlStartTs=Date.now();
   if(FORCE==="storm")curLevel.storm=true;
-  seq=[];over=false;busy=false;hints=(sub?6:3);themeHits=0;wordsMade=[];stormFired=false;
+  /* hints no longer refill per level — they're a banked resource like Removes
+     (Jason 2026-08-06: free refills meant hint-spam forever, tax or no tax) */
+  seq=[];over=false;busy=false;themeHits=0;wordsMade=[];stormFired=false;
   glowTiles=[];stealFired=false;starDrops=0;gauntlet=false;gauntletTries=0;usedEmergency=false;tutStep=0;frozenScale=0;resetBars();
   var _lk=levelId();attemptN=(_lk===lastLevelKey)?attemptN+1:1;lastLevelKey=_lk;
   lvlHintsUsed=0;lvlBoostersUsed=0;
@@ -1698,7 +1697,7 @@ function featherLesson(){
 }
 
 $("winov").addEventListener("pointerdown",nextLevel);
-$("replaybtn").addEventListener("click",function(){$("doneov").classList.add("hidden");allWords=[];removesBank=1;skill=0;coinBank=0;ravenCharms=0;updateCoins();startLevel(0);});
+$("replaybtn").addEventListener("click",function(){$("doneov").classList.add("hidden");allWords=[];removesBank=1;hints=3;skill=0;coinBank=0;ravenCharms=0;updateCoins();startLevel(0);});
 $("buycancel").addEventListener("click",function(){$("buyov").classList.add("hidden");buyKind=null;});
 $("buyconfirm").addEventListener("click",function(){
   var P=PRICES[buyKind];
@@ -1803,7 +1802,7 @@ $("subbtn").addEventListener("click",function(){
   sub=true;try{localStorage.setItem("tsp_sub","1");}catch(e){}
   pushLog("SUB mock-subscribed");
   track("purchase",{sku:"tilespell_plus",mock:true,placement:"sub_screen"});
-  hints=Math.max(hints,6);peeks=Math.max(peeks,3);setCounts();
+  hints+=3;peeks=Math.max(peeks,3);setCounts();
   $("subov").classList.add("hidden");$("adov").classList.add("hidden");
   clearInterval(adTimer);
   $("subopen").textContent="⭐ Tilespell+ active";
