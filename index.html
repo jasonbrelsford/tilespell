@@ -392,7 +392,7 @@ textarea.mkin{min-height:58px;resize:vertical;}
   <div class="card">
     <div class="big">⭐</div>
     <h2>Tilespell+</h2>
-    <p style="text-align:left;">✔ No sponsor breaks, ever<br>✔ <b>Half-price hints</b> — 5% of your coins instead of 10%<br>✔ +1 Peek every level<br>✔ Subscriber boards: language &amp; study paths <i>(coming soon)</i></p>
+    <p style="text-align:left;">✔ No sponsor breaks, ever<br>✔ <b>Half-price hints</b>, everywhere on the trail<br>✔ +1 Peek and <b>+1 Place</b> every level<br>✔ Subscriber boards: language &amp; study paths <i>(coming soon)</i></p>
     <p style="font-size:13px;">$4.99/month · mock trial for playtesting — no real charge</p>
     <button class="btn gold" id="subbtn">Start free trial</button>
     <button class="btn" id="subclose" style="background:none;box-shadow:none;border:none;color:var(--ink-soft);text-shadow:none;">Not now</button>
@@ -431,7 +431,7 @@ textarea.mkin{min-height:58px;resize:vertical;}
   <div class="card">
     <div class="big">🏳️</div>
     <h2>Out of moves?</h2>
-    <p>Retry this level — or face the Gauntlet: fresh letters, and you must spell one 5+ letter word within 2 tries to pass instantly.</p>
+    <p>Retry this level — or face the Gauntlet: fresh letters, one try. Spell a single 5+ letter word to pass instantly. About half who dare make it.</p>
     <button class="btn gold" id="gauntletbtn">⚔️ Gauntlet</button>
     <button class="btn" id="retrybtn">Retry level</button><br>
     <button class="btn" id="copylog" style="font-size:14px;padding:9px 18px;">📋 Copy playtest log</button>
@@ -785,7 +785,10 @@ var lvl=0,score=0,tiles=[],seq=[],hints=3,places=3,removesBank=1,peeks=2,mode=nu
 var glowTiles=[],skill=0,effTarget=70,stealFired=false,starDrops=0,gauntlet=false,gauntletTries=0,usedEmergency=false;
 var coinBank=0,buyKind=null,tutStep=0,ravenCharms=0;
 var featherTaught=false;try{featherTaught=localStorage.getItem("tsp_feather")==="1";}catch(e){}
-var PLACE_UNLOCK=1000;
+/* Place is a story gift, not a coin gate (Jason 2026-08-08 — the 1000-coin lock
+   meant the button was dead weight): Poppy grants the letter bag on the first
+   5-letter-minimum level, right when the trail demands it. */
+var placeGranted=(function(){try{return localStorage.getItem("tsp_place")==="1";}catch(e){return false;}})();
 var lvlStartTs=Date.now();
 var testerId=(function(){try{return new URLSearchParams(location.search).get("tester")||localStorage.getItem("tsp_tester")||"anon";}catch(e){return "anon";}})();
 var plog=(function(){try{return JSON.parse(localStorage.getItem("tsp_log_"+testerId)||"[]");}catch(e){return [];}})();
@@ -841,10 +844,15 @@ var PRICES={
   remove:{n:1,cost:75,icon:"✂️",title:"1 Remove"},
   peek:{n:2,cost:40,icon:"👁️",title:"2 Peeks"}
 };
-/* Hints cost a cut of your wallet (Jason 2026-08-06, third pass — flat banks and
-   taxes were both farmable): 10% of current coins per hint, 5% with Tilespell+.
-   Scales with wealth, never free, always roughly affordable. */
-function hintCost(){return Math.max(1,Math.ceil(coinBank*(sub?0.05:0.10)));}
+/* Hints have a posted price by trail act (Jason 2026-08-08, fourth pass — the
+   %-of-wallet tax punished saving and read as unfair when the number moved):
+   20 coins in Act I (areas 1–9), 30 / 40 / 50 deeper in; half with Tilespell+.
+   Income is 30 + score/10 per win, so a hint is ~half an early win's pay. */
+function hintCost(){
+  var act=(endlessMode||sponsorMode||friendMode)?1:(area<9?0:(area<24?1:(area<39?2:3)));
+  var base=[20,30,40,50][act];
+  return sub?Math.ceil(base/2):base;
+}
 function updateCoins(){$("coinsview").textContent=coinBank;setCounts();}
 function openBuy(kind){
   buyKind=kind;var P=PRICES[kind];
@@ -1040,7 +1048,9 @@ function genAreaLevel(a,i){
     goal:(i===9)?3:2,
     places:(a===0&&i<5)?3:2
   };
-  if(i===7)cfg.minLen=4;
+  /* The high-trail wall (Jason 2026-08-08): L7–10 demand 5-letter words — this is
+     where Place and the Gauntlet earn their keep. Area 1 ramps at 4 to teach it. */
+  if(i>=6)cfg.minLen=(a===0)?4:5;
   if(a>=1&&i>=8)cfg.bag="tight";
   if(a>=2&&i>=8)cfg.bury=true;
   if(A.storm||(a>=2&&i===5))cfg.storm=true;
@@ -1276,7 +1286,7 @@ function setCounts(){
   $("peekbtn").classList.toggle("zero",peeks<=0);
   $("placebtn").classList.toggle("armed",mode==="place");
   $("removebtn").classList.toggle("armed",mode==="remove");
-  var lockPlace=coinBank<PLACE_UNLOCK;
+  var lockPlace=!placeGranted;
   $("placebtn").classList.toggle("locked",lockPlace&&mode!=="place");
   $("placelock").classList.toggle("hidden",!lockPlace);
   $("placelabel").textContent=(mode==="place"&&drawn)?("Bury \""+drawn+"\""):"Place";
@@ -1319,7 +1329,17 @@ function submitWord(){
   var word=seq.map(function(t){return t.ch;}).join("");
   if(word.length<minLen()||!(DICT[word]||isThemeWord(word))){sBad();
     track("word_guess",{level_id:levelId(),correct:false,word_len:word.length});
-    var sb=$("submitbtn");sb.classList.add("shake");setTimeout(function(){sb.classList.remove("shake");},300);return;}
+    var sb=$("submitbtn");sb.classList.add("shake");setTimeout(function(){sb.classList.remove("shake");},300);
+    /* In the gauntlet a real attempt (3+ letters) burns the try even when the
+       word is bad — otherwise rejections would be free retries forever */
+    if(gauntlet&&word.length>=3){
+      gauntletTries--;
+      if(gauntletTries<=0){gauntlet=false;toast("⚔️ Not a word the trail knows… the gauntlet wins this time.");
+        track("level_fail",{level_id:levelId(),attempt_n:attemptN,duration_s:lvlSecs(),fail_reason:"gauntlet"});
+        setTimeout(function(){startLevel(lvl);},1100);
+      }else toast("⚔️ Needs a real 5+ letter word — "+gauntletTries+" try left!");
+    }
+    return;}
   busy=true;
   glowTiles=[];
   var themed=isThemeWord(word),p=ptsSeq(seq);
@@ -1558,7 +1578,7 @@ function restoreLine(an,li,w){
 function doHint(){
   if(busy||over)return;
   var cost=hintCost();
-  if(coinBank<cost){toast("💡 A hint costs "+(sub?"5":"10")+"% of your coins — spell words to earn some 🪙");return;}
+  if(coinBank<cost){toast("💡 A hint costs "+cost+" coins here — spell words to earn more 🪙");return;}
   var w=formableBest();
   if(!w){ensurePlayable();return;}
   coinBank-=cost;updateCoins();
@@ -1650,7 +1670,7 @@ function stealLetters(){
 function togglePlace(){
   if(busy||over)return;
   if(mode==="place"){mode=null;drawn=null;setCounts();toast("Placement cancelled — letter returned to the bag");return;}
-  if(coinBank<PLACE_UNLOCK){sBad();toast("🔒 The letter bag unlocks at "+PLACE_UNLOCK+" coins — keep clearing levels!");return;}
+  if(!placeGranted){sBad();toast("🔒 Poppy's letter bag arrives when the trail gets steep — keep climbing!");return;}
   if(places<=0){openBuy("place");return;}
   mode="place";drawn=drawLetter();
   setCounts();
@@ -1882,11 +1902,22 @@ function startLevel(n){
   $("lvlnum").textContent=(n+1);
   $("lvltotal").textContent=endlessMode?" ∞":(friendMode?" 🎁":"/10");
   $("target").textContent=effTarget;
-  places=(L().places!==undefined)?L().places:3;
+  places=((L().places!==undefined)?L().places:3)+(sub?1:0);
   peeks=(sub?3:2);
+  if(!placeGranted&&minLen()>=5&&!endlessMode&&!sponsorMode&&!friendMode){
+    placeGranted=true;try{localStorage.setItem("tsp_place","1");}catch(e){}
+    $("placebtn").classList.add("tut");
+    (function(tok){
+      setTimeout(function(){if(over||lvlStartTs!==tok)return;
+        toast("🐝 The steep trail hides its letters… Take my letter bag! Draw one and tuck it wherever you need.",5200);},1200);
+      setTimeout(function(){$("placebtn").classList.remove("tut");},8600);
+    })(lvlStartTs);
+    track("ftue_step",{step:"place_grant",elapsed_s:0});
+    pushLog("PLACE granted (first 5-letter level)");
+  }
   mode=null;drawn=null;setCounts();
   setScore(0);
-  $("traymsg").textContent=L().minLen?("🌙 "+L().minLen+"–7 letter words only tonight"):"Tap open tiles to spell a word (3–7 letters)";
+  $("traymsg").textContent=L().minLen?(L().minLen>=5?"⛰️ High trail — 5–7 letter words only!":("🌙 "+L().minLen+"–7 letter words only tonight")):"Tap open tiles to spell a word (3–7 letters)";
   tiles=L().pos.map(function(p){return {x:p.x,y:p.y,z:p.z,alive:true,ch:"E"};});
   dealLetters();
   render();renderTray();renderTheme();
@@ -1958,7 +1989,7 @@ $("peekbtn").addEventListener("click",doPeek);
   $(pair[0]).addEventListener("click",function(e){
     e.stopPropagation();
     if(over||busy)return;
-    if(pair[1]==="place"&&coinBank<PLACE_UNLOCK){sBad();toast("🔒 The letter bag unlocks at "+PLACE_UNLOCK+" coins");return;}
+    if(pair[1]==="place"&&!placeGranted){sBad();toast("🔒 Poppy's letter bag arrives when the trail gets steep");return;}
     mode=null;drawn=null;setCounts();
     openBuy(pair[1]);
   });
@@ -1985,12 +2016,21 @@ $("savelog").addEventListener("click",function(){
       toast("Couldn't save — use Copy instead");
     });
 });
+function anyLongFormable(){
+  var counts=freeCounts();
+  for(var i=0;i<DICT_LIST.length;i++){var w=DICT_LIST[i];if(w.length>=5&&canForm(w,counts))return true;}
+  return false;
+}
 $("gauntletbtn").addEventListener("click",function(){
   $("overov").classList.add("hidden");
-  gauntlet=true;gauntletTries=2;seq=[];mode=null;drawn=null;setCounts();
-  dealLetters();render();renderTray();
+  /* One try ≈ a coin flip for finding a 5-letter word (Jason's 50% target);
+     the re-deal loop guarantees one always exists, so it's never rigged */
+  gauntlet=true;gauntletTries=1;seq=[];mode=null;drawn=null;setCounts();
+  dealLetters();
+  for(var g=0;g<6&&!anyLongFormable();g++)dealLetters();
+  render();renderTray();
   sCrash();
-  toast("⚔️ GAUNTLET: spell one 5+ letter word. 2 tries!",3600);
+  toast("⚔️ GAUNTLET: one try — spell a single 5+ letter word!",3600);
 });
 $("mutebtn").addEventListener("click",function(){muted=!muted;$("mutebtn").classList.toggle("off",muted);});
 window.addEventListener("resize",function(){if(tiles.length)render();});
