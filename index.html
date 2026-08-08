@@ -146,7 +146,7 @@ header{display:flex;align-items:center;justify-content:space-between;gap:8px;pad
 .mnode.seasonal{background:linear-gradient(180deg,#FFC98A,#F0821E);border-color:#FFE9C4;
   box-shadow:0 0 0 4px rgba(240,130,30,.45),0 5px 0 #B35C0F;animation:curpulse 1.7s ease-in-out infinite;}
 .mnode.seasonal b{color:#5C2E00;} .mnode.seasonal i{color:#8A4A08;}
-#subopen{margin-top:6px;background:linear-gradient(180deg,#FFE9A8,#FFC63F);border:2px solid #fff;border-radius:999px;
+#subopen,#collopen{margin-top:6px;background:linear-gradient(180deg,#FFE9A8,#FFC63F);border:2px solid #fff;border-radius:999px;
   padding:6px 16px;font-size:13px;font-weight:800;color:#5C3A00;cursor:pointer;box-shadow:0 3px 0 #C8860B;align-self:center;}
 .adbox{height:130px;border-radius:14px;margin:8px 0 12px;display:flex;align-items:center;justify-content:center;
   font-size:38px;background:linear-gradient(120deg,#7B44C8,#FF4D9D,#FFB53D);background-size:200% 200%;
@@ -265,6 +265,25 @@ header{display:flex;align-items:center;justify-content:space-between;gap:8px;pad
   100%{transform:translate(-50%,-50%) scale(1.05);opacity:0}}
 #restore{display:flex;flex-direction:column;align-items:center;gap:8px;margin-bottom:6px;}
 #rmeet{margin:0 0 2px;font-size:13.5px;font-weight:700;font-style:italic;color:var(--ink-soft);line-height:1.45;}
+#collov{position:fixed;inset:0;z-index:2300;overflow-y:auto;display:flex;flex-direction:column;align-items:center;
+  background:linear-gradient(180deg,#2A1A4A 0%,#4A2A6A 70%,#5C2FA3 100%);
+  padding:26px 12px calc(34px + env(safe-area-inset-bottom,0px));}
+#collhead{font-size:23px;font-weight:800;color:#FFF6E8;text-align:center;text-shadow:0 2px 6px rgba(0,0,0,.35);}
+#collcount{display:block;font-size:13.5px;color:#C9B8E8;font-weight:700;margin-top:3px;letter-spacing:.04em;}
+#collgrid{display:grid;grid-template-columns:repeat(5,1fr);gap:8px 6px;max-width:350px;margin:16px auto 14px;}
+.ccell{width:60px;height:60px;display:flex;align-items:center;justify-content:center;font-size:40px;
+  position:relative;border-radius:15px;line-height:1;}
+.ccell.off{filter:grayscale(1) brightness(.34) opacity(.45);}
+.ccell.cur{filter:grayscale(1) brightness(.62) opacity(.85);animation:breathe 1.8s infinite;}
+.ccell.on{filter:none;background:rgba(255,246,232,.10);box-shadow:0 0 12px rgba(255,214,90,.18);}
+.ccell.fillin{animation:fillpop 1.4s ease forwards;}
+@keyframes fillpop{0%{filter:grayscale(1) brightness(.34) opacity(.45);transform:scale(1)}
+  55%{filter:none;opacity:1;transform:scale(1.45)}
+  75%{filter:none;transform:scale(.96)}100%{filter:none;opacity:1;transform:scale(1)}}
+.ccell.flash{animation:cellflash 1.1s ease 2;}
+@keyframes cellflash{0%,100%{transform:scale(1);filter:grayscale(1) brightness(.62) opacity(.85)}
+  50%{transform:scale(1.34);filter:none;opacity:1}}
+#collback{align-self:center;}
 #ranimal{font-size:62px;line-height:1;animation:animalin .6s cubic-bezier(.2,.8,.3,1.3);}
 @keyframes animalin{0%{transform:scale(.3) translateY(18px);opacity:0}70%{transform:scale(1.12)}100%{transform:scale(1)}}
 #rbubble{position:relative;background:#fff;border:2.5px solid #E8D9B8;border-radius:16px;padding:9px 15px;
@@ -355,7 +374,7 @@ textarea.mkin{min-height:58px;resize:vertical;}
 <div id="stormflash"></div>
 
 <div id="mapscr" class="hidden">
-  <div id="maphead">Tilespell Trail<span id="mapsub">tap an area to play</span><button id="subopen">⭐ Try Tilespell+</button></div>
+  <div id="maphead">Tilespell Trail<span id="mapsub">tap an area to play</span><span style="display:flex;gap:8px;justify-content:center;"><button id="subopen">⭐ Try Tilespell+</button><button id="collopen">🖼️ Voices</button></span></div>
   <div id="maptrail"></div>
 </div>
 
@@ -477,6 +496,12 @@ textarea.mkin{min-height:58px;resize:vertical;}
     <p id="mkhint" style="font-size:12px;text-align:center;margin:8px 0 0;"></p>
     <button class="btn" id="mkclose" style="background:none;box-shadow:none;border:none;color:var(--ink-soft);text-shadow:none;width:100%;">Close</button>
   </div>
+</div>
+
+<div id="collov" class="hidden">
+  <div id="collhead">Voices of the Trail<span id="collcount"></span></div>
+  <div id="collgrid"></div>
+  <button class="btn gold" id="collback">Back to the trail</button>
 </div>
 
 <div id="storyov" class="hidden">
@@ -1373,12 +1398,75 @@ function nextLevel(){
     startLevel(lvl+1);return;
   }
   if(!endlessMode&&lvl+1>=10){
-    showMap();
-    toast(AREAS[area].summit?"🏔️ THE SUMMIT! You climbed the whole Tilespell Trail! 🎉":
-      "🎉 "+AREAS[area].name+" complete!"+(area<lastAreaIdx()?" A new area opens on the trail!":""),3600);
+    if(AREAS[area].an){
+      /* Area complete → the Voices collage: this animal fills in with color,
+         the next one on the path flashes, then straight into its levels */
+      var nextA=(area+1<=lastAreaIdx()&&area+1===prog.a&&!prog.done[prog.a])?prog.a:-1;
+      showCollage(area,nextA);
+    }else{
+      showMap();
+      toast("🎉 "+AREAS[area].name+" complete!",3600);
+    }
     return;
   }
   startLevel(lvl+1);
+}
+var collTimers=[],collShownTs=0,collFillIdx=-1,collNextA=-1;
+function renderCollage(fillIdx){
+  var g=$("collgrid");g.innerHTML="";
+  var doneCount=0,total=0;
+  for(var a=0;a<AREAS.length;a++){
+    var A=AREAS[a];if(!A.an)continue;
+    total++;
+    var done=!!prog.done[a];if(done)doneCount++;
+    var d=document.createElement("div");
+    d.className="ccell "+((done&&a!==fillIdx)?"on":((a===prog.a&&!done)?"cur":"off"));
+    d.textContent=A.an.i;d.dataset.a=a;
+    g.appendChild(d);
+  }
+  $("collcount").textContent=doneCount+" / "+total+" voices restored";
+}
+function collCell(a){
+  var cells=$("collgrid").children;
+  for(var i=0;i<cells.length;i++)if(+cells[i].dataset.a===a)return cells[i];
+  return null;
+}
+function finishCollage(){
+  if($("collov").classList.contains("hidden"))return;
+  collTimers.forEach(clearTimeout);collTimers=[];
+  $("collov").classList.add("hidden");
+  if(collFillIdx>=0){
+    var rms=Date.now()-collShownTs;
+    track("story_beat",{beat_id:"chorus_a"+(collFillIdx+1),action:(rms<1200?"skipped":"viewed"),read_ms:rms});
+    if(collNextA>=0){enterArea(collNextA);}
+    else{
+      showMap();
+      toast(AREAS[collFillIdx].summit?"🏔️ THE SUMMIT! Every voice on the Trail is home! 🎉":
+        ("🎉 "+AREAS[collFillIdx].name+" complete!"),3600);
+    }
+    collFillIdx=-1;collNextA=-1;
+  }
+}
+function showCollage(fillIdx,nextA){
+  renderCollage(fillIdx);
+  collFillIdx=fillIdx;collNextA=nextA;collShownTs=Date.now();
+  $("collback").classList.toggle("hidden",fillIdx>=0);
+  $("collov").classList.remove("hidden");
+  if(fillIdx<0){track("story_beat",{beat_id:"chorus_view",action:"viewed"});return;}
+  pushLog("CHORUS "+AREAS[fillIdx].an.n+(nextA>=0?(" → "+AREAS[nextA].an.n):" (trail head)"));
+  var fc=collCell(fillIdx);
+  if(fc)fc.scrollIntoView({block:"center"});
+  collTimers.push(setTimeout(function(){
+    if(fc){fc.classList.remove("off","on");fc.classList.add("fillin");sTheme();}
+  },600));
+  collTimers.push(setTimeout(function(){
+    if(fc){fc.classList.remove("fillin");fc.classList.add("on");}
+  },2100));
+  if(nextA>=0)collTimers.push(setTimeout(function(){
+    var nc=collCell(nextA);
+    if(nc){nc.scrollIntoView({block:"center",behavior:"smooth"});nc.classList.add("flash");}
+  },2300));
+  collTimers.push(setTimeout(finishCollage,nextA>=0?5200:4200));
 }
 function levelWin(){
   over=true;sWin();
@@ -1834,6 +1922,16 @@ $("winov").addEventListener("pointerdown",function(){
   if(Date.now()-winShownTs<600)return; /* stray post-submit taps must not eat the story beat */
   nextLevel();
 });
+$("collov").addEventListener("pointerdown",function(e){
+  if(collFillIdx<0)return; /* viewer mode closes via its button */
+  if(Date.now()-collShownTs<600)return;
+  finishCollage();
+});
+$("collback").addEventListener("click",function(e){
+  e.stopPropagation();
+  $("collov").classList.add("hidden");
+});
+$("collopen").addEventListener("click",function(){showCollage(-1,-1);});
 $("replaybtn").addEventListener("click",function(){$("doneov").classList.add("hidden");allWords=[];removesBank=1;skill=0;coinBank=0;ravenCharms=0;updateCoins();startLevel(0);});
 $("buycancel").addEventListener("click",function(){$("buyov").classList.add("hidden");buyKind=null;});
 $("buyconfirm").addEventListener("click",function(){
@@ -1970,6 +2068,7 @@ if(AUTOPLAY){
       if(vis("giftov")){$("giftplay").click();return;}
       if(vis("fdoneov")){$("fdexplore").click();return;}
       if(vis("mkov")){$("mkclose").click();return;}
+      if(vis("collov")){plan=[];return;} /* let the collage sequence play itself out */
       if(vis("adov")){plan=[];if(!$("adcontinue").disabled)$("adcontinue").click();return;}
       if(vis("subov")){$("subclose").click();return;}
       if(vis("buyov")){$("buycancel").click();return;}
